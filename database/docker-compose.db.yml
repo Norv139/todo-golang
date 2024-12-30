@@ -9,3 +9,13 @@ services:
       - "${STORE_DB_EXTERNAL_PORT}:${STORE_DB_PORT}"
     volumes:
       - ./dump:/docker-entrypoint-initdb.d
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_contaner
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: chat_app
+    ports:
+      - 27017:27017
