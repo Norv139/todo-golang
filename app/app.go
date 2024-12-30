@@ -3,24 +3,26 @@ package main
 import (
 	"github.com/gorilla/mux"
 	"log"
-	"main/handlers"
+	todo "main/handlers"
 	"net/http"
+	"time"
 )
 
 func main() {
-
-	hTodo := handlers.HandlerTodo{}
-
 	router := mux.NewRouter()
 
-	router.HandleFunc("/todo", hTodo.CreateTodo).Methods("POST")
-	router.HandleFunc("/todo", hTodo.UpdateTodo).Methods("PUT")
-	router.HandleFunc("/todo", hTodo.DeleteTodo).Methods("DELETE")
-	router.HandleFunc("/todo", hTodo.FindTodo).Methods("GET")
-
-	router.HandleFunc("/todo/find", hTodo.FindTodo).Methods("POST")
-	router.HandleFunc("/todo/get", hTodo.GetTodo).Methods("POST")
+	handlerTodo := todo.HandlerTodo{}
+	handlerTodo.Init(router)
 
 	// Start the HTTP server
-	log.Fatal(http.ListenAndServe(":3000", router))
+
+	srv := &http.Server{
+		Handler: router,
+		Addr:    "127.0.0.1:3000",
+		// Good practice: enforce timeouts for servers you create!
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
+
+	log.Fatal(srv.ListenAndServe())
 }
