@@ -3,16 +3,18 @@ package main
 import (
 	"github.com/gorilla/mux"
 	"log"
+	"main/db"
 	todo "main/handlers"
 	"net/http"
 	"time"
 )
 
 func main() {
+
+	storeConnections := db.InitConnections()
 	router := mux.NewRouter()
 
-	handlerTodo := todo.HandlerTodo{}
-	handlerTodo.Init(router)
+	todo.CreateTodoRouter(router, storeConnections)
 
 	// Start the HTTP server
 

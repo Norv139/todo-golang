@@ -3,6 +3,7 @@ package todo
 import (
 	"encoding/json"
 	"github.com/gorilla/mux"
+	"main/db"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,14 +18,21 @@ type createDTO struct {
 	Desc      string `json:"desc"`
 }
 
-type HandlerTodo struct {
-	Store  map[int64]interface{}
-	Router *mux.Router
+type handlerTodo struct {
+	Store       map[int64]interface{}
+	Router      *mux.Router
+	Collections interface{}
 }
 
-func (s *HandlerTodo) Init(r *mux.Router) *mux.Router {
+func CreateTodoRouter(
+	r *mux.Router,
+	sc *db.StoreClients,
+) *mux.Router {
+
+	s := handlerTodo{}
 	s.Store = make(map[int64]interface{})
 	s.Router = r
+	s.Collections = sc
 
 	r.HandleFunc("/todo", s.createTodo).Methods("POST")
 	r.HandleFunc("/todo/{pk}", s.updateTodo).Methods("PUT")
@@ -36,7 +44,7 @@ func (s *HandlerTodo) Init(r *mux.Router) *mux.Router {
 	return r
 }
 
-func (s *HandlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
+func (s *handlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
 	id := len(s.Store) + 1
 
 	updatedItem := createDTO{
@@ -57,7 +65,7 @@ func (s *HandlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO: доделать
-func (s *HandlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
+func (s *handlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
 	//id := mux.Vars(r)["pk"]
 	var updatedItem createDTO
 
@@ -74,7 +82,7 @@ func (s *HandlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO: доделать
-func (s *HandlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
+func (s *handlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
 	var updatedItem createDTO
 
 	err := json.NewDecoder(r.Body).Decode(&updatedItem)
@@ -90,7 +98,7 @@ func (s *HandlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO: доделать
-func (s *HandlerTodo) findTodo(w http.ResponseWriter, r *http.Request) {
+func (s *handlerTodo) findTodo(w http.ResponseWriter, r *http.Request) {
 	values := make([]interface{}, 0, len(s.Store))
 	for _, v := range s.Store {
 		values = append(values, v)
@@ -99,7 +107,7 @@ func (s *HandlerTodo) findTodo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(values)
 }
 
-func (s *HandlerTodo) getTodo(w http.ResponseWriter, r *http.Request) {
+func (s *handlerTodo) getTodo(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["pk"]
 
 	i, _ := strconv.Atoi(id)
