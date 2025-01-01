@@ -15,7 +15,7 @@ func InitConnections() *StoreClients {
 	store := &StoreClients{}
 
 	postgresClient := connect.PostgresConnect()
-	defer postgresClient.Close()
+	//defer postgresClient.Close()
 	store.Postgres = postgresClient
 
 	mongodbClient := connect.MongoConnect()

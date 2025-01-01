@@ -3,25 +3,26 @@ package todo
 import (
 	"encoding/json"
 	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
+	"log"
 	"main/db"
+	"main/db/entites"
+	"main/utils"
 	"net/http"
 	"strconv"
 	"time"
 )
 
-type createDTO struct {
-	createdAt int64  `json:"CreatedAt"`
-	updatedAt int64  `json:"updatedAt"`
-	deletedAt int64  `json:"deletedAt"`
-	Id        int    `json:"id"`
-	Name      string `json:"name"`
-	Desc      string `json:"desc"`
+type todoDTO struct {
+	Name  string `json:"name"`
+	Desc  string `json:"desc"`
+	Check bool   `json:"check"`
 }
 
 type handlerTodo struct {
-	Store       map[int64]interface{}
-	Router      *mux.Router
-	Collections interface{}
+	Store   map[int64]interface{}
+	Router  *mux.Router
+	Clients *db.StoreClients
 }
 
 func CreateTodoRouter(
@@ -32,7 +33,7 @@ func CreateTodoRouter(
 	s := handlerTodo{}
 	s.Store = make(map[int64]interface{})
 	s.Router = r
-	s.Collections = sc
+	s.Clients = sc
 
 	r.HandleFunc("/todo", s.createTodo).Methods("POST")
 	r.HandleFunc("/todo/{pk}", s.updateTodo).Methods("PUT")
@@ -45,45 +46,74 @@ func CreateTodoRouter(
 }
 
 func (s *handlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
-	id := len(s.Store) + 1
+	createdItem := todoDTO{}
 
-	updatedItem := createDTO{
-		Id: id,
-	}
-
-	err := json.NewDecoder(r.Body).Decode(&updatedItem)
+	err := json.NewDecoder(r.Body).Decode(&createdItem)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	now := time.Now().Unix()
-	updatedItem.createdAt = now
+	createdEntity := entites.Todo{
+		Name: createdItem.Name,
+		Desc: createdItem.Desc,
+	}
 
-	s.Store[int64(id)] = updatedItem
+	queryCtx, queryCtxFm := utils.GetCtx()
+	defer queryCtxFm()
 
-	json.NewEncoder(w).Encode(updatedItem)
+	sqlInsert := `
+	insert into
+    todo ("id", "desc", "name")
+	values (default, $1, $2)
+	RETURNING "id"
+	`
+
+	rows := s.Clients.Postgres.QueryRowContext(
+		queryCtx,
+		sqlInsert,
+		createdItem.Desc,
+		createdItem.Name,
+	)
+	rows.Scan(&createdEntity.Id)
+
+	selectRows, _ := s.Clients.Postgres.Query(`select "id", "name" from todo`)
+
+	defer selectRows.Close()
+
+	var entitiesArr []interface{}
+	for selectRows.Next() {
+		var (
+			id   int64
+			name string
+		)
+		rows.Scan(&id, &name)
+		entitiesArr = append(entitiesArr, name)
+	}
+
+	log.Println(entitiesArr)
+
+	json.NewEncoder(w).Encode(createdItem)
 }
 
 // TODO: доделать
 func (s *handlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
 	//id := mux.Vars(r)["pk"]
-	var updatedItem createDTO
 
-	err := json.NewDecoder(r.Body).Decode(&updatedItem)
+	var updateDTO todoDTO
+	//var todoEntity entites.Todo
+
+	err := json.NewDecoder(r.Body).Decode(&updateDTO)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	now := time.Now().Unix()
-	updatedItem.createdAt = now
-	s.Store[now] = updatedItem
 
-	json.NewEncoder(w).Encode(updatedItem)
+	json.NewEncoder(w).Encode(updateDTO)
 }
 
 // TODO: доделать
 func (s *handlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
-	var updatedItem createDTO
+	var updatedItem todoDTO
 
 	err := json.NewDecoder(r.Body).Decode(&updatedItem)
 	if err != nil {
@@ -91,7 +121,6 @@ func (s *handlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().Unix()
-	updatedItem.createdAt = now
 	s.Store[now] = updatedItem
 
 	json.NewEncoder(w).Encode(updatedItem)

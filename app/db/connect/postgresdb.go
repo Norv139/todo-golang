@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-type publicTable struct {
-	Name string
-}
-
 func PostgresConnect() *sql.DB {
 
 	err := godotenv.Load("../_.env")
