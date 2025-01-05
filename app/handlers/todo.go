@@ -8,17 +8,9 @@ import (
 	_ "github.com/lib/pq"
 	"main/db"
 	"main/db/entites"
-	"main/utils"
 	"net/http"
 	"strconv"
-	"time"
 )
-
-type todoDTO struct {
-	Name  string `json:"name"`
-	Desc  string `json:"desc"`
-	Check bool   `json:"check"`
-}
 
 type handlerTodo struct {
 	Store    map[int64]interface{}
@@ -44,7 +36,7 @@ func CreateTodoRouter(
 
 	r.HandleFunc("/todo", s.createTodo).Methods("POST")
 	r.HandleFunc("/todo/{pk}", s.updateTodo).Methods("PUT")
-	r.HandleFunc("/todo", s.deleteTodo).Methods("DELETE")
+	r.HandleFunc("/todo/{pk}", s.deleteTodo).Methods("DELETE")
 
 	r.HandleFunc("/todo/find", s.findTodo).Methods("GET")
 	r.HandleFunc("/todo/get/{pk}", s.getTodo).Methods("GET")
@@ -53,88 +45,75 @@ func CreateTodoRouter(
 }
 
 func (s *handlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
-	createdItem := todoDTO{}
+	todoItem := entites.TodoDTO{}
 
-	err := json.NewDecoder(r.Body).Decode(&createdItem)
+	err := json.NewDecoder(r.Body).Decode(&todoItem)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	createdEntity := entites.Todo{
-		Name: createdItem.Name,
-		Desc: createdItem.Desc,
+	created := entites.Todo{
+		Name:  todoItem.Name,
+		Desc:  todoItem.Desc,
+		Check: todoItem.Check,
 	}
 
-	queryCtx, queryCtxFm := utils.GetCtx()
-	defer queryCtxFm()
+	todoTable := s.Clients.Postgres.Table("todo")
 
-	sqlInsert := `
-	insert into
-    todo ("id", "desc", "name")
-	values (default, $1, $2)
-	RETURNING "id"
-	`
-
-	rows := s.Postgres.QueryRowContext(
-		queryCtx,
-		sqlInsert,
-		createdItem.Desc,
-		createdItem.Name,
-	)
-	rows.Scan(&createdEntity.Id)
-
-	selectRows, _ := s.Postgres.Query(`select "id", "name" from todo`)
-
-	defer selectRows.Close()
-
-	var entitiesArr []interface{}
-	for selectRows.Next() {
-		var (
-			id   int64
-			name string
-		)
-		rows.Scan(&id, &name)
-		entitiesArr = append(entitiesArr, name)
-	}
+	todoTable.Create(&created)
+	todoTable.Where("id = ?", created.Id).First(&created) // подтягивает остальные данные типо CreateAt
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(createdItem)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(created)
 }
 
-// TODO: ничего не делает - доделать
 func (s *handlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
-	//id := mux.Vars(r)["pk"]
+	vars := mux.Vars(r)
+	id, _ := strconv.Atoi(vars["pk"])
 
-	var updateDTO todoDTO
-	//var todoEntity entites.Todo
+	updated := entites.Todo{}
+	todoTable := s.Clients.Postgres.Table("todo")
 
-	err := json.NewDecoder(r.Body).Decode(&updateDTO)
+	err := json.NewDecoder(r.Body).Decode(&updated)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	if result := todoTable.First(&updated, id); result.Error != nil {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.Clients.Postgres.Updates(&updated)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updateDTO)
+	json.NewEncoder(w).Encode(updated)
 }
 
-// TODO: ничего не делает - доделать
 func (s *handlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
-	var updatedItem todoDTO
+	vars := mux.Vars(r)
+	id, _ := strconv.Atoi(vars["pk"])
 
-	err := json.NewDecoder(r.Body).Decode(&updatedItem)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	deleteItem := entites.Todo{Id: uint(id)}
+
+	todoTable := s.Clients.Postgres.Table("todo")
+
+	if res := todoTable.First(&deleteItem); res.Error != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	now := time.Now().Unix()
-	s.Store[now] = updatedItem
+
+	todoTable.Delete(deleteItem)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updatedItem)
+	json.NewEncoder(w).Encode(deleteItem)
 }
 
 // TODO: доделать запрос так, чтобы можно было указывать парметры поиска

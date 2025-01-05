@@ -7,6 +7,7 @@ import (
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 	"log"
 	"main/utils"
 	"os"
@@ -34,7 +35,12 @@ func PostgresConnect() *gorm.DB {
 		os.Getenv("STORE_PG_DB"),
 	)
 
-	client, err := gorm.Open(postgres.Open(conn), &gorm.Config{})
+	client, err := gorm.Open(postgres.Open(conn), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true, // use singular table name, table for `User` would be `user` with this option enabled
+		},
+	})
+	
 	if err != nil {
 		log.Fatal(conn)
 		panic(err)
