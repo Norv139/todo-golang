@@ -1,10 +1,11 @@
 package todo
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
-	"log"
 	"main/db"
 	"main/db/entites"
 	"main/utils"
@@ -20,9 +21,10 @@ type todoDTO struct {
 }
 
 type handlerTodo struct {
-	Store   map[int64]interface{}
-	Router  *mux.Router
-	Clients *db.StoreClients
+	Store    map[int64]interface{}
+	Router   *mux.Router
+	Clients  *db.StoreClients
+	Postgres *sql.DB
 }
 
 func CreateTodoRouter(
@@ -34,6 +36,11 @@ func CreateTodoRouter(
 	s.Store = make(map[int64]interface{})
 	s.Router = r
 	s.Clients = sc
+
+	var err interface{}
+	if s.Postgres, err = sc.Postgres.DB(); err != nil {
+		panic(err)
+	}
 
 	r.HandleFunc("/todo", s.createTodo).Methods("POST")
 	r.HandleFunc("/todo/{pk}", s.updateTodo).Methods("PUT")
@@ -68,7 +75,7 @@ func (s *handlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
 	RETURNING "id"
 	`
 
-	rows := s.Clients.Postgres.QueryRowContext(
+	rows := s.Postgres.QueryRowContext(
 		queryCtx,
 		sqlInsert,
 		createdItem.Desc,
@@ -76,7 +83,7 @@ func (s *handlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
 	)
 	rows.Scan(&createdEntity.Id)
 
-	selectRows, _ := s.Clients.Postgres.Query(`select "id", "name" from todo`)
+	selectRows, _ := s.Postgres.Query(`select "id", "name" from todo`)
 
 	defer selectRows.Close()
 
@@ -90,12 +97,12 @@ func (s *handlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
 		entitiesArr = append(entitiesArr, name)
 	}
 
-	log.Println(entitiesArr)
-
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(createdItem)
 }
 
-// TODO: доделать
+// TODO: ничего не делает - доделать
 func (s *handlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
 	//id := mux.Vars(r)["pk"]
 
@@ -108,10 +115,12 @@ func (s *handlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updateDTO)
 }
 
-// TODO: доделать
+// TODO: ничего не делает - доделать
 func (s *handlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
 	var updatedItem todoDTO
 
@@ -123,25 +132,53 @@ func (s *handlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 	s.Store[now] = updatedItem
 
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updatedItem)
 }
 
-// TODO: доделать
+// TODO: доделать запрос так, чтобы можно было указывать парметры поиска
 func (s *handlerTodo) findTodo(w http.ResponseWriter, r *http.Request) {
-	values := make([]interface{}, 0, len(s.Store))
-	for _, v := range s.Store {
-		values = append(values, v)
+
+	var todoItems []entites.Todo
+
+	todoTable := s.Clients.Postgres.Table("todo")
+	fnFind := todoTable.Find
+
+	if res := fnFind(&todoItems); res.Error != nil {
+		fmt.Println(res.Error)
 	}
 
-	json.NewEncoder(w).Encode(values)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(todoItems)
 }
 
 func (s *handlerTodo) getTodo(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["pk"]
 
-	i, _ := strconv.Atoi(id)
+	vars := mux.Vars(r)
+	id, _ := strconv.Atoi(vars["pk"])
 
-	values := s.Store[int64(i)]
+	var todoItems []entites.Todo
 
-	json.NewEncoder(w).Encode(values)
+	db := s.Clients.Postgres
+
+	qb := db.Table("todo").Where("id = ?", id)
+
+	fnFind := qb.Find
+
+	if res := fnFind(&todoItems); res.Error != nil {
+		http.Error(w, res.Error.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(todoItems) == 1 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(todoItems[0])
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+	}
+	return
 }

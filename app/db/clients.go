@@ -1,14 +1,14 @@
 package db
 
 import (
-	"database/sql"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"gorm.io/gorm"
 	"main/db/connect"
 )
 
 type StoreClients struct {
 	Mongo    *mongo.Client
-	Postgres *sql.DB
+	Postgres *gorm.DB
 }
 
 func InitConnections() *StoreClients {

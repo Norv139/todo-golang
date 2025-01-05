@@ -5,11 +5,14 @@ import (
 	"log"
 	"main/db"
 	todo "main/handlers"
+	"main/utils/middleware"
 	"net/http"
+	"os"
 	"time"
 )
 
 func main() {
+	logger := log.New(os.Stdout, "", log.LstdFlags)
 
 	storeConnections := db.InitConnections()
 	router := mux.NewRouter()
@@ -17,6 +20,9 @@ func main() {
 	todo.CreateTodoRouter(router, storeConnections)
 
 	// Start the HTTP server
+
+	logMiddleware := middleware.NewLogMiddleware(logger)
+	router.Use(logMiddleware.Func())
 
 	srv := &http.Server{
 		Handler: router,

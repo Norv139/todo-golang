@@ -5,13 +5,15 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"log"
 	"main/utils"
 	"os"
 	"time"
 )
 
-func PostgresConnect() *sql.DB {
+func PostgresConnect() *gorm.DB {
 
 	err := godotenv.Load("../_.env")
 
@@ -24,25 +26,31 @@ func PostgresConnect() *sql.DB {
 	defer ctxPingFn()
 
 	conn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		"localhost",
-		os.Getenv(portEnv),
+		"postgresql://%s:%s@%s:%s/%s",
 		os.Getenv("STORE_PG_DB_USER"),
 		os.Getenv("STORE_PG_DB_PASSWORD"),
+		"localhost",
+		os.Getenv(portEnv),
 		os.Getenv("STORE_PG_DB"),
 	)
 
-	client, err := sql.Open("postgres", conn)
-
+	client, err := gorm.Open(postgres.Open(conn), &gorm.Config{})
 	if err != nil {
+		log.Fatal(conn)
 		panic(err)
 	}
 
-	if err := client.PingContext(ctxPing); err != nil {
+	db, err := client.DB()
+	if err != nil {
+		log.Fatal(conn)
 		panic(err)
 	}
 
-	pgCheckDb(client)
+	if err := db.PingContext(ctxPing); err != nil {
+		panic(err)
+	}
+
+	pgCheckDb(db)
 
 	return client
 }
