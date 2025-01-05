@@ -18,29 +18,35 @@ func PostgresConnect() *gorm.DB {
 
 	err := godotenv.Load("../_.env")
 
+	host := os.Getenv("HOST_MDB")
 	portEnv := "STORE_PG_DB_PORT"
 	if err == nil {
+		host = "0.0.0.0"
 		portEnv = "STORE_PG_DB_EXTERNAL_PORT"
 	}
 
 	ctxPing, ctxPingFn := context.WithTimeout(context.Background(), 2*time.Second)
 	defer ctxPingFn()
 
+	// "postgresql://%s:%s@%s:%s/%s"
+
 	conn := fmt.Sprintf(
-		"postgresql://%s:%s@%s:%s/%s",
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+		host,
 		os.Getenv("STORE_PG_DB_USER"),
 		os.Getenv("STORE_PG_DB_PASSWORD"),
-		"localhost",
-		os.Getenv(portEnv),
 		os.Getenv("STORE_PG_DB"),
+		os.Getenv(portEnv),
 	)
+
+	log.Println("pg connect", conn)
 
 	client, err := gorm.Open(postgres.Open(conn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true, // use singular table name, table for `User` would be `user` with this option enabled
 		},
 	})
-	
+
 	if err != nil {
 		log.Fatal(conn)
 		panic(err)

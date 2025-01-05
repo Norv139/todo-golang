@@ -1,8 +1,24 @@
 services:
-  db:
+  web:
     extends:
       file: database/docker-compose.db.yml
-      service: db
+      service: app
+    build: ./app
+    env_file:
+      - _.env
+    image: golang:alpine
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - pgdb
+      - mongodb
+
+  pgdb:
+    extends:
+      file: database/docker-compose.db.yml
+      service: pgdb
+
   mongodb:
     extends:
       file: database/docker-compose.db.yml
