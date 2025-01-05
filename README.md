@@ -13,12 +13,6 @@ stop project:
 make docker-down
 ```
 
-create sh scripts:
-```sh
-make scripts-create
-```
-
-
 ### other
 clear docker:
 ```sh
