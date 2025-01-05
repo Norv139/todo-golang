@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"log"
 	"main/utils"
 	"os"
 	"time"
@@ -16,7 +17,9 @@ func MongoConnect() *mongo.Client {
 	err := godotenv.Load("../_.env")
 
 	portEnv := "STORE_MDB_DB_PORT"
+	host := os.Getenv("STORE_MDB_HOST")
 	if err == nil {
+		host = "0.0.0.0"
 		portEnv = "STORE_MDB_DB_EXTERNAL_PORT"
 	}
 
@@ -25,7 +28,7 @@ func MongoConnect() *mongo.Client {
 
 	url := fmt.Sprintf(
 		"mongodb://%s:%s",
-		"localhost",
+		host,
 		os.Getenv(portEnv),
 	)
 
@@ -33,6 +36,8 @@ func MongoConnect() *mongo.Client {
 		Username: os.Getenv("STORE_MDB_DB_USER"),
 		Password: os.Getenv("STORE_MDB_DB_PASSWORD"),
 	}
+
+	log.Println("mongo connect", url, auth)
 
 	clientOpts := options.Client().ApplyURI(url).SetAuth(auth)
 	client, err := mongo.Connect(clientOpts)

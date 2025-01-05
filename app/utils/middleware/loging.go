@@ -48,12 +48,6 @@ func (m *LogMiddleware) Func() mux.MiddlewareFunc {
 				logRespWriter.statusCode,
 				r.URL.Path,
 			)
-			//m.logger.Printf(
-			//	"duration=%s status=%d body=%s",
-			//	time.Since(startTime).String(),
-			//	logRespWriter.statusCode,
-			//	//logRespWriter.buf.String(),
-			//)
 
 		})
 	}

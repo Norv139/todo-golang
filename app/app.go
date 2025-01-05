@@ -19,18 +19,17 @@ func main() {
 
 	todo.CreateTodoRouter(router, storeConnections)
 
-	// Start the HTTP server
-
 	logMiddleware := middleware.NewLogMiddleware(logger)
 	router.Use(logMiddleware.Func())
 
 	srv := &http.Server{
 		Handler: router,
-		Addr:    "127.0.0.1:3000",
+		Addr:    ":3000",
 		// Good practice: enforce timeouts for servers you create!
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
 
+	log.Println("Listening on " + srv.Addr)
 	log.Fatal(srv.ListenAndServe())
 }
