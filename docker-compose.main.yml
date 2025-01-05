@@ -3,3 +3,7 @@ services:
     extends:
       file: database/docker-compose.db.yml
       service: db
+  mongodb:
+    extends:
+      file: database/docker-compose.db.yml
+      service: mongodb

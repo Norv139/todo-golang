@@ -1,34 +1,42 @@
 package todo
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
+	"main/db"
+	"main/db/entites"
 	"net/http"
 	"strconv"
-	"time"
 )
 
-type createDTO struct {
-	createdAt int64  `json:"CreatedAt"`
-	updatedAt int64  `json:"updatedAt"`
-	deletedAt int64  `json:"deletedAt"`
-	Id        int    `json:"id"`
-	Name      string `json:"name"`
-	Desc      string `json:"desc"`
+type handlerTodo struct {
+	Store    map[int64]interface{}
+	Router   *mux.Router
+	Clients  *db.StoreClients
+	Postgres *sql.DB
 }
 
-type HandlerTodo struct {
-	Store  map[int64]interface{}
-	Router *mux.Router
-}
+func CreateTodoRouter(
+	r *mux.Router,
+	sc *db.StoreClients,
+) *mux.Router {
 
-func (s *HandlerTodo) Init(r *mux.Router) *mux.Router {
+	s := handlerTodo{}
 	s.Store = make(map[int64]interface{})
 	s.Router = r
+	s.Clients = sc
+
+	var err interface{}
+	if s.Postgres, err = sc.Postgres.DB(); err != nil {
+		panic(err)
+	}
 
 	r.HandleFunc("/todo", s.createTodo).Methods("POST")
 	r.HandleFunc("/todo/{pk}", s.updateTodo).Methods("PUT")
-	r.HandleFunc("/todo", s.deleteTodo).Methods("DELETE")
+	r.HandleFunc("/todo/{pk}", s.deleteTodo).Methods("DELETE")
 
 	r.HandleFunc("/todo/find", s.findTodo).Methods("GET")
 	r.HandleFunc("/todo/get/{pk}", s.getTodo).Methods("GET")
@@ -36,75 +44,120 @@ func (s *HandlerTodo) Init(r *mux.Router) *mux.Router {
 	return r
 }
 
-func (s *HandlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
-	id := len(s.Store) + 1
+func (s *handlerTodo) createTodo(w http.ResponseWriter, r *http.Request) {
+	todoItem := entites.TodoDTO{}
 
-	updatedItem := createDTO{
-		Id: id,
-	}
-
-	err := json.NewDecoder(r.Body).Decode(&updatedItem)
+	err := json.NewDecoder(r.Body).Decode(&todoItem)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	now := time.Now().Unix()
-	updatedItem.createdAt = now
+	created := entites.Todo{
+		Name:  todoItem.Name,
+		Desc:  todoItem.Desc,
+		Check: todoItem.Check,
+	}
 
-	s.Store[int64(id)] = updatedItem
+	todoTable := s.Clients.Postgres.Table("todo")
 
-	json.NewEncoder(w).Encode(updatedItem)
+	todoTable.Create(&created)
+	todoTable.Where("id = ?", created.Id).First(&created) // подтягивает остальные данные типо CreateAt
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(created)
 }
 
-// TODO: доделать
-func (s *HandlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
-	//id := mux.Vars(r)["pk"]
-	var updatedItem createDTO
+func (s *handlerTodo) updateTodo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, _ := strconv.Atoi(vars["pk"])
 
-	err := json.NewDecoder(r.Body).Decode(&updatedItem)
+	updated := entites.Todo{}
+	todoTable := s.Clients.Postgres.Table("todo")
+
+	err := json.NewDecoder(r.Body).Decode(&updated)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	now := time.Now().Unix()
-	updatedItem.createdAt = now
-	s.Store[now] = updatedItem
 
-	json.NewEncoder(w).Encode(updatedItem)
-}
-
-// TODO: доделать
-func (s *HandlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
-	var updatedItem createDTO
-
-	err := json.NewDecoder(r.Body).Decode(&updatedItem)
-	if err != nil {
+	if result := todoTable.First(&updated, id); result.Error != nil {
+		w.Header().Set("Content-Type", "application/json")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	now := time.Now().Unix()
-	updatedItem.createdAt = now
-	s.Store[now] = updatedItem
 
-	json.NewEncoder(w).Encode(updatedItem)
+	s.Clients.Postgres.Updates(&updated)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updated)
 }
 
-// TODO: доделать
-func (s *HandlerTodo) findTodo(w http.ResponseWriter, r *http.Request) {
-	values := make([]interface{}, 0, len(s.Store))
-	for _, v := range s.Store {
-		values = append(values, v)
+func (s *handlerTodo) deleteTodo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, _ := strconv.Atoi(vars["pk"])
+
+	deleteItem := entites.Todo{Id: uint(id)}
+
+	todoTable := s.Clients.Postgres.Table("todo")
+
+	if res := todoTable.First(&deleteItem); res.Error != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 
-	json.NewEncoder(w).Encode(values)
+	todoTable.Delete(deleteItem)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(deleteItem)
 }
 
-func (s *HandlerTodo) getTodo(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["pk"]
+// TODO: доделать запрос так, чтобы можно было указывать парметры поиска
+func (s *handlerTodo) findTodo(w http.ResponseWriter, r *http.Request) {
 
-	i, _ := strconv.Atoi(id)
+	var todoItems []entites.Todo
 
-	values := s.Store[int64(i)]
+	todoTable := s.Clients.Postgres.Table("todo")
+	fnFind := todoTable.Find
 
-	json.NewEncoder(w).Encode(values)
+	if res := fnFind(&todoItems); res.Error != nil {
+		fmt.Println(res.Error)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(todoItems)
+}
+
+func (s *handlerTodo) getTodo(w http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+	id, _ := strconv.Atoi(vars["pk"])
+
+	var todoItems []entites.Todo
+
+	db := s.Clients.Postgres
+
+	qb := db.Table("todo").Where("id = ?", id)
+
+	fnFind := qb.Find
+
+	if res := fnFind(&todoItems); res.Error != nil {
+		http.Error(w, res.Error.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(todoItems) == 1 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(todoItems[0])
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+	}
+	return
 }
